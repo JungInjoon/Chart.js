@@ -178,8 +178,12 @@
 			onAnimationProgress: function(){},
 
 			// Function - Will fire on animation completion.
-			onAnimationComplete: function(){}
+			onAnimationComplete: function(){},
 
+			useDefaultValue: true,
+			useStaticLastWidth: true,
+			useRotatLabel: false,
+			defaultYValue: 180
 		}
 	};
 
@@ -389,6 +393,11 @@
 
 			var maxValue = max(valuesArray),
 				minValue = min(valuesArray);
+
+			// 정인준 수정
+			if (Chart.defaults.global.useDefaultValue == true) {
+				maxValue = max(valuesArray) < Chart.defaults.global.defaultYValue * 0.95 ? Chart.defaults.global.defaultYValue : max(valuesArray) * 1.05;
+			}
 
 			// We need some degree of seperation here to calculate the scales if all the values are the same
 			// Adding/minusing 0.5 will give us a range of 1.
@@ -1526,16 +1535,24 @@
 			}
 
 		},
-		calculateXLabelRotation : function(){
+		calculateXLabelRotation: function () {
 			//Get the width of each grid by calculating the difference
 			//between x offsets between 0 and 1.
 
 			this.ctx.font = this.font;
 
+			// 정인준 수정
 			var firstWidth = this.ctx.measureText(this.xLabels[0]).width,
-				lastWidth = this.ctx.measureText(this.xLabels[this.xLabels.length - 1]).width,
+				lastWidth = 0,
 				firstRotated,
 				lastRotated;
+
+			if (Chart.defaults.global.useStaticLastWidth == true) {
+				lastWidth = 0;
+			}
+			else {
+				lastWidth = this.ctx.measureText(this.xLabels[this.xLabels.length - 1]).width;
+			}
 
 
 			this.xScalePaddingRight = lastWidth/2 + 3;
@@ -1551,22 +1568,25 @@
 				var xGridWidth = Math.floor(this.calculateX(1) - this.calculateX(0)) - 6;
 
 				//Max label rotate should be 90 - also act as a loop counter
-				while ((this.xLabelWidth > xGridWidth && this.xLabelRotation === 0) || (this.xLabelWidth > xGridWidth && this.xLabelRotation <= 90 && this.xLabelRotation > 0)){
-					cosRotation = Math.cos(toRadians(this.xLabelRotation));
+				// 정인준 수정
+				if (Chart.defaults.global.useRotatLabel == true) {
+					while ((this.xLabelWidth > xGridWidth && this.xLabelRotation === 0) || (this.xLabelWidth > xGridWidth && this.xLabelRotation <= 90 && this.xLabelRotation > 0)) {
+						cosRotation = Math.cos(toRadians(this.xLabelRotation));
 
-					firstRotated = cosRotation * firstWidth;
-					lastRotated = cosRotation * lastWidth;
+						firstRotated = cosRotation * firstWidth;
+						lastRotated = cosRotation * lastWidth;
 
-					// We're right aligning the text now.
-					if (firstRotated + this.fontSize / 2 > this.yLabelWidth + 8){
-						this.xScalePaddingLeft = firstRotated + this.fontSize / 2;
+						// We're right aligning the text now.
+						if (firstRotated + this.fontSize / 2 > this.yLabelWidth + 8){
+							this.xScalePaddingLeft = firstRotated + this.fontSize / 2;
+						}
+						this.xScalePaddingRight = this.fontSize/2;
+
+
+						this.xLabelRotation++;
+						this.xLabelWidth = cosRotation * originalLabelWidth;
+
 					}
-					this.xScalePaddingRight = this.fontSize/2;
-
-
-					this.xLabelRotation++;
-					this.xLabelWidth = cosRotation * originalLabelWidth;
-
 				}
 				if (this.xLabelRotation > 0){
 					this.endPoint -= Math.sin(toRadians(this.xLabelRotation))*originalLabelWidth + 3;
@@ -1667,14 +1687,27 @@
 						// Check to see if line/bar here and decide where to place the line
 						linePos = this.calculateX(index - (this.offsetGridLines ? 0.5 : 0)) + aliasPixel(this.lineWidth),
 						isRotated = (this.xLabelRotation > 0),
-						drawVerticalLine = this.showVerticalLines;
+						drawVerticalLine = this.showVerticalLines,
+						drawVerticalLineInterval = this.showVerticalLinesInterval,
+						drawVerticalLineNotEmptyLabel = this.showVerticalLinesNotEmptyLabel;
+
+					if (drawVerticalLineInterval < 1 && drawVerticalLineNotEmptyLabel == true) {
+						if (label == '') {
+							drawVerticalLine = false;
+						}
+					}
+					if (drawVerticalLineInterval > 0 && drawVerticalLineNotEmptyLabel == false) {
+						if (index % drawVerticalLineInterval != 0) {
+							drawVerticalLine = false;
+						}
+					}
 
 					// This is Y axis, so draw it
 					if (index === 0 && !drawVerticalLine){
 						drawVerticalLine = true;
 					}
 
-					if (drawVerticalLine){
+					if (drawVerticalLine) {
 						ctx.beginPath();
 					}
 
@@ -1701,11 +1734,13 @@
 
 
 					// Small lines at the bottom of the base grid line
-					ctx.beginPath();
-					ctx.moveTo(linePos,this.endPoint);
-					ctx.lineTo(linePos,this.endPoint + 5);
-					ctx.stroke();
-					ctx.closePath();
+					if (drawVerticalLine) {
+						ctx.beginPath();
+						ctx.moveTo(linePos, this.endPoint);
+						ctx.lineTo(linePos, this.endPoint + 5);
+						ctx.stroke();
+						ctx.closePath();
+					}
 
 					ctx.save();
 					ctx.translate(xPos,(isRotated) ? this.endPoint + 12 : this.endPoint + 8);
@@ -2036,7 +2071,7 @@
 		scaleShowGridLines : true,
 
 		//String - Colour of the grid lines
-		scaleGridLineColor : "rgba(0,0,0,.05)",
+		scaleGridLineColor: "rgba(99,99,99,1)",
 
 		//Number - Width of the grid lines
 		scaleGridLineWidth : 1,
@@ -2237,10 +2272,12 @@
 				showHorizontalLines : this.options.scaleShowHorizontalLines,
 				showVerticalLines : this.options.scaleShowVerticalLines,
 				gridLineWidth : (this.options.scaleShowGridLines) ? this.options.scaleGridLineWidth : 0,
-				gridLineColor : (this.options.scaleShowGridLines) ? this.options.scaleGridLineColor : "rgba(0,0,0,0)",
+				gridLineColor: (this.options.scaleShowGridLines) ? this.options.scaleGridLineColor : "rgba(99,99,99,1)",
 				padding : (this.options.showScale) ? 0 : (this.options.barShowStroke) ? this.options.barStrokeWidth : 0,
 				showLabels : this.options.scaleShowLabels,
-				display : this.options.showScale
+				display: this.options.showScale,
+				showVerticalLinesInterval: this.options.scaleShowVerticalLinesInterval,
+				showVerticalLinesNotEmptyLabel: this.options.scaleShowVerticalLinesNotEmptyLabel
 			};
 
 			if (this.options.scaleOverride){
@@ -2520,7 +2557,7 @@
 		scaleShowGridLines : true,
 
 		//String - Colour of the grid lines
-		scaleGridLineColor : "rgba(0,0,0,.05)",
+		scaleGridLineColor: "rgba(99,99,99,1)",
 
 		//Number - Width of the grid lines
 		scaleGridLineWidth : 1,
@@ -2559,7 +2596,10 @@
 		datasetFill : true,
 
 		//String - A legend template
-		legendTemplate : "<ul class=\"<%=name.toLowerCase()%>-legend\"><% for (var i=0; i<datasets.length; i++){%><li><span style=\"background-color:<%=datasets[i].strokeColor%>\"></span><%if(datasets[i].label){%><%=datasets[i].label%><%}%></li><%}%></ul>"
+		legendTemplate: "<ul class=\"<%=name.toLowerCase()%>-legend\"><% for (var i=0; i<datasets.length; i++){%><li><span style=\"background-color:<%=datasets[i].strokeColor%>\"></span><%if(datasets[i].label){%><%=datasets[i].label%><%}%></li><%}%></ul>",
+
+		scaleShowVerticalLinesInterval: 1,
+		scaleShowVerticalLinesNotEmptyLabel: true
 
 	};
 
@@ -2711,7 +2751,9 @@
 				gridLineColor : (this.options.scaleShowGridLines) ? this.options.scaleGridLineColor : "rgba(0,0,0,0)",
 				padding: (this.options.showScale) ? 0 : this.options.pointDotRadius + this.options.pointDotStrokeWidth,
 				showLabels : this.options.scaleShowLabels,
-				display : this.options.showScale
+				display: this.options.showScale,
+				showVerticalLinesInterval: this.options.scaleShowVerticalLinesInterval,
+				showVerticalLinesNotEmptyLabel: this.options.scaleShowVerticalLinesNotEmptyLabel
 			};
 
 			if (this.options.scaleOverride){
@@ -2931,7 +2973,7 @@
 		animateScale : false,
 
 		//String - A legend template
-		legendTemplate : "<ul class=\"<%=name.toLowerCase()%>-legend\"><% for (var i=0; i<segments.length; i++){%><li><span style=\"background-color:<%=segments[i].fillColor%>\"></span><%if(segments[i].label){%><%=segments[i].label%><%}%></li><%}%></ul>"
+		legendTemplate: "<ul class=\"<%=name.toLowerCase()%>-legend\"><% for (var i=0; i<segments.length; i++){%><li><span style=\"background-color:<%=segments[i].fillColor%>\"></span><%if(segments[i].label){%><%=segments[i].label%><%}%></li><%}%></ul>"
 	};
 
 
